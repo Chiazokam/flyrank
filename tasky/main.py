@@ -28,11 +28,11 @@ async def root():
 def health():
     return {"status": "ok"}
 
-@app.get("/tasks")
+@app.get("/tasks", summary="Retrieve all tasks")
 def get_tasks():
     return tasks
 
-@app.get("/tasks/{id}")
+@app.get("/tasks/{id}", summary="Retrieve a task by ID")
 def get_task(id: int):
     task = next((task for task in tasks if task["id"] == id), None)
     if task:
@@ -40,7 +40,7 @@ def get_task(id: int):
     else:
         return  { "error": f"Task {id} not found" }, 404
 
-@app.post("/tasks")
+@app.post("/tasks", summary="Create a new task")
 def create_task(task: dict):
     if "title" not in task:
         return { "error": "Title is required" }, 400
@@ -54,7 +54,7 @@ def create_task(task: dict):
         tasks.append(new_task)
         return new_task, 201
     
-@app.put("/tasks/{id}")
+@app.put("/tasks/{id}", summary="Update a task by ID")
 def update_task(id: int, task: dict):
     task_to_update = next((task for task in tasks if task["id"] == id), None)
     if task_to_update:
@@ -64,7 +64,7 @@ def update_task(id: int, task: dict):
     else:
         return { "error": f"Task {id} not found" }, 404
     
-@app.delete("/tasks/{id}")
+@app.delete("/tasks/{id}", summary="Delete a task by ID")
 def delete_task(id: int):
     task_to_delete = next((task for task in tasks if task["id"] == id), None)
     if task_to_delete:
