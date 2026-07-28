@@ -54,3 +54,21 @@ def create_task(task: dict):
         tasks.append(new_task)
         return new_task, 201
     
+@app.put("/tasks/{id}")
+def update_task(id: int, task: dict):
+    task_to_update = next((task for task in tasks if task["id"] == id), None)
+    if task_to_update:
+        task_to_update["title"] = task.get("title", task_to_update["title"])
+        task_to_update["done"] = task.get("done", task_to_update["done"])
+        return task_to_update
+    else:
+        return { "error": f"Task {id} not found" }, 404
+    
+@app.delete("/tasks/{id}")
+def delete_task(id: int):
+    task_to_delete = next((task for task in tasks if task["id"] == id), None)
+    if task_to_delete:
+        tasks.remove(task_to_delete)
+        return { "message": f"Task {id} deleted" }, 204
+    else:
+        return { "error": f"Task {id} not found" }, 404
