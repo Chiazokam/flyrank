@@ -39,3 +39,18 @@ def get_task(id: int):
         return task
     else:
         return  { "error": f"Task {id} not found" }, 404
+
+@app.post("/tasks")
+def create_task(task: dict):
+    if "title" not in task:
+        return { "error": "Title is required" }, 400
+
+    else:
+        new_task = {
+        "id": len(tasks) + 1,
+        "title": task["title"],
+        "done": False
+        }
+        tasks.append(new_task)
+        return new_task, 201
+    
