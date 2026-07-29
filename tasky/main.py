@@ -1,6 +1,8 @@
 from fastapi import FastAPI
+from contextlib import asynccontextmanager
+import sqlite3
 
-app = FastAPI(title="Tasky")
+DB = "tasks.db"
 
 tasks = [
     {
@@ -19,6 +21,59 @@ tasks = [
         "done": True
     }
 ]
+
+def connect_db():
+    # check_same_thread=False is required for SQLite to work safely with FastAPI's multithreading
+    conn = sqlite3.connect(DB, check_same_thread=False)
+    conn.row_factory = sqlite3.Row  # Returns rows as dictionaries instead of tuples
+    return conn
+
+def get_db():
+    conn = connect_db()
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+# @asynccontextmanager
+async def lifespan(app: FastAPI):
+    # --- STARTUP LOGIC ---
+    conn = connect_db()
+    cursor = conn.cursor()
+
+    # 1. Create the table if it doesn't already exist
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            completed BOOLEAN DEFAULT 0
+        )
+        """
+    )
+
+    # 2. Check if the table is empty
+    cursor.execute("SELECT COUNT(*) FROM tasks")
+    count = cursor.fetchone()[0]
+
+    # 3. Insert three example tasks ONLY if empty
+    if count == 0:
+        example_tasks = [
+            ("Set up FastAPI project", 1),
+            ("Connect SQLite database", 0),
+            ("Build task management API", 0),
+        ]
+        cursor.executemany(
+            "INSERT INTO tasks (title, completed) VALUES (?, ?)",
+            example_tasks,
+        )
+        conn.commit()
+
+    conn.close()
+
+    yield
+
+app = FastAPI(title="Tasky", lifespan=lifespan)
 
 @app.get("/")
 async def root():
