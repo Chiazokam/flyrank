@@ -1,9 +1,14 @@
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, status
 from contextlib import asynccontextmanager
 import sqlite3
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 DB = "tasks.db"
+
+class TaskCreate(BaseModel):
+    title: str
+    done: bool = False
 
 tasks = [
     {
@@ -105,20 +110,27 @@ def get_task(id: int, db=Depends(get_db)):
 
     return dict(task)
 
-@app.post("/tasks", summary="Create a new task")
-def create_task(task: dict):
+@app.post("/tasks", summary="Create a new task", status_code=status.HTTP_201_CREATED)
+def create_task(task: dict, db=Depends(get_db)):
     if "title" not in task:
         return { "error": "Title is required" }, 400
 
-    else:
-        new_task = {
-        "id": len(tasks) + 1,
-        "title": task["title"],
-        "done": False
-        }
-        tasks.append(new_task)
-        return new_task, 201
     
+    cursor = db.cursor()
+    cursor.execute(
+        "INSERT INTO tasks (title, completed) VALUES (?, ?)",
+        (task.title, task.done),
+    )
+    db.commit()
+    
+    # Fetch the newly created task
+    task_id = cursor.lastrowid
+    cursor.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
+    new_task = cursor.fetchone()
+    
+    return new_task, 201
+    
+
 @app.put("/tasks/{id}", summary="Update a task by ID")
 def update_task(id: int, task: dict):
     task_to_update = next((task for task in tasks if task["id"] == id), None)
