@@ -96,7 +96,7 @@ def get_tasks(db=Depends(get_db)):
     tasks = [{**dict(row), "done": bool(row["done"])} for row in cursor.fetchall()]
     return tasks
 
-@app.get("/tasks/{id}", summary="Retrieve a task by ID")
+@app.get("/tasks/{id}", summary="Retrieve a task by ID", status_code=status.HTTP_200_OK)
 def get_task(id: int, db=Depends(get_db)):
     cursor = db.cursor()
     cursor.execute("SELECT * FROM tasks WHERE id = ?", (id,))
@@ -131,21 +131,47 @@ def create_task(task: dict, db=Depends(get_db)):
     return new_task, 201
     
 
-@app.put("/tasks/{id}", summary="Update a task by ID")
-def update_task(id: int, task: dict):
-    task_to_update = next((task for task in tasks if task["id"] == id), None)
-    if task_to_update:
-        task_to_update["title"] = task.get("title", task_to_update["title"])
-        task_to_update["done"] = task.get("done", task_to_update["done"])
-        return task_to_update
-    else:
-        return { "error": f"Task {id} not found" }, 404
+@app.put("/tasks/{id}", summary="Update a task by ID", status_code=status.HTTP_200_OK)
+def update_task(id: int, task: dict, db=Depends(get_db)):
+    cursor = db.cursor()
     
-@app.delete("/tasks/{id}", summary="Delete a task by ID")
-def delete_task(id: int):
-    task_to_delete = next((task for task in tasks if task["id"] == id), None)
-    if task_to_delete:
-        tasks.remove(task_to_delete)
-        return { "message": f"Task {id} deleted" }, 204
-    else:
-        return { "error": f"Task {id} not found" }, 404
+    # Check if task exists
+    cursor.execute("SELECT * FROM tasks WHERE id = ?", (id,))
+    existing_task = cursor.fetchone()
+    
+    if existing_task is None:
+        return JSONResponse(
+            status_code=404,
+            content={"error": "Task not found"},
+        )
+    
+    cursor.execute(
+        "UPDATE tasks SET title = ?, completed = ? WHERE id = ?",
+        (task.title, task.completed, id),
+    )
+    db.commit()
+    
+    # Fetch and return the updated task
+    cursor.execute("SELECT * FROM tasks WHERE id = ?", (id,))
+    updated_task = cursor.fetchone()
+    
+    return dict(updated_task)
+    
+@app.delete("/tasks/{id}", summary="Delete a task by ID", status_code=status.HTTP_204_NO_CONTENT)
+def delete_task(id: int, db=Depends(get_db)):
+    cursor = db.cursor()
+    
+    # Check if task exists
+    cursor.execute("SELECT * FROM tasks WHERE id = ?", (id,))
+    existing_task = cursor.fetchone()
+    
+    if existing_task is None:
+        return JSONResponse(
+            status_code=404,
+            content={"error": "Task not found"},
+        )
+    
+    cursor.execute("DELETE FROM tasks WHERE id = ?", (id,))
+    db.commit()
+    
+    return {"message": "Task deleted successfully"}
