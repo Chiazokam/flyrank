@@ -1,6 +1,7 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from contextlib import asynccontextmanager
 import sqlite3
+from fastapi.responses import JSONResponse
 
 DB = "tasks.db"
 
@@ -47,7 +48,7 @@ async def lifespan(app: FastAPI):
         CREATE TABLE IF NOT EXISTS tasks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
-            completed BOOLEAN DEFAULT 0
+            done BOOLEAN DEFAULT False
         )
         """
     )
@@ -59,12 +60,12 @@ async def lifespan(app: FastAPI):
     # 3. Insert three example tasks ONLY if empty
     if count == 0:
         example_tasks = [
-            ("Set up FastAPI project", 1),
-            ("Connect SQLite database", 0),
-            ("Build task management API", 0),
+            ("Set up FastAPI project", False),
+            ("Connect SQLite database", False),
+            ("Build task management API", True),
         ]
         cursor.executemany(
-            "INSERT INTO tasks (title, completed) VALUES (?, ?)",
+            "INSERT INTO tasks (title, done) VALUES (?, ?)",
             example_tasks,
         )
         conn.commit()
@@ -84,16 +85,25 @@ def health():
     return {"status": "ok"}
 
 @app.get("/tasks", summary="Retrieve all tasks")
-def get_tasks():
+def get_tasks(db=Depends(get_db)):
+    cursor = db.cursor()
+    cursor.execute("SELECT * FROM tasks")
+    tasks = [{**dict(row), "done": bool(row["done"])} for row in cursor.fetchall()]
     return tasks
 
 @app.get("/tasks/{id}", summary="Retrieve a task by ID")
-def get_task(id: int):
-    task = next((task for task in tasks if task["id"] == id), None)
-    if task:
-        return task
-    else:
-        return  { "error": f"Task {id} not found" }, 404
+def get_task(id: int, db=Depends(get_db)):
+    cursor = db.cursor()
+    cursor.execute("SELECT * FROM tasks WHERE id = ?", (id,))
+    task = cursor.fetchone()
+
+    if task is None:
+        return JSONResponse(
+            status_code=404,
+            content={"error": "Task not found"},
+        )
+
+    return dict(task)
 
 @app.post("/tasks", summary="Create a new task")
 def create_task(task: dict):
