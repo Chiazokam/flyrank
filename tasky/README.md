@@ -94,3 +94,21 @@ Nothing. The Prompt was clear, specific and not 'toooo' long
 
 ### What did your prompt forget to specify — and what did the AI silently decide for you?
 I forgot to specifiy other contents of the README, except for pasting the swagger screenshot. AI came up with a well documented README for me to run the server and to test each endpoint
+
+
+# Connecting To The Database
+### Why SQLite was chosen
+- It is easily set up and configured
+- It is light weight
+
+### Where the database file is stored
+The database file `tasks.db` is stored at the root of the `tasky` folder
+
+### How to start the project
+Reference the `Install & run` section at the top of this file
+
+### A screenshot of your database viewer
+![Screenshot](./screenshots/dbbrowser.png)
+
+### One example SQL query you executed
+`SELECT * FROM tasks WHERE done  =  false`
