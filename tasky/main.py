@@ -10,24 +10,6 @@ class TaskCreate(BaseModel):
     title: str
     done: bool = False
 
-tasks = [
-    {
-        "id": 1,
-        "title": "Task 1",
-        "done": False
-    },
-    {
-        "id": 2,
-        "title": "Task 2",
-        "done": False
-    },
-    {
-        "id": 3,
-        "title": "Task 3",
-        "done": True
-    }
-]
-
 def connect_db():
     # check_same_thread=False is required for SQLite to work safely with FastAPI's multithreading
     conn = sqlite3.connect(DB, check_same_thread=False)
@@ -115,11 +97,10 @@ def create_task(task: dict, db=Depends(get_db)):
     if "title" not in task:
         return { "error": "Title is required" }, 400
 
-    
     cursor = db.cursor()
     cursor.execute(
-        "INSERT INTO tasks (title, completed) VALUES (?, ?)",
-        (task.title, task.done),
+        "INSERT INTO tasks (title, done) VALUES (?, ?)",
+        (task["title"], task["done"]),
     )
     db.commit()
     
@@ -146,8 +127,8 @@ def update_task(id: int, task: dict, db=Depends(get_db)):
         )
     
     cursor.execute(
-        "UPDATE tasks SET title = ?, completed = ? WHERE id = ?",
-        (task.title, task.completed, id),
+        "UPDATE tasks SET title = ?, done = ? WHERE id = ?",
+        (task.title, task.done, id),
     )
     db.commit()
     
