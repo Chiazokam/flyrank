@@ -110,5 +110,26 @@ Reference the `Install & run` section at the top of this file
 ### A screenshot of your database viewer
 ![Screenshot](./screenshots/dbbrowser.png)
 
+
+
+
 ### One example SQL query you executed
 `SELECT * FROM tasks WHERE done  =  false`
+
+# A3 — Containerize your stack
+
+To start the Container
+
+```bash
+docker run --name postgres-container -e POSTGRES_PASSWORD=postgresPassword -d postgres
+```
+
+Show a running postgres container
+```bash
+docker ps
+```
+
+Open SQL prompt
+```bash
+docker exec -it postgres-container psql -U postgres -d postgres
+```
