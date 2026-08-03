@@ -2,23 +2,27 @@ import os
 from fastapi import Depends, FastAPI, status
 from contextlib import asynccontextmanager
 import psycopg2
-from fastapi.responses import JSONResponse
+from psycopg2.extras import RealDictCursor
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from dotenv import load_dotenv
+
+load_dotenv()
 
 database_url = os.getenv("DATABASE_URL")
 
 DB = database_url
 
+
 class TaskCreate(BaseModel):
     title: str
     done: bool = False
 
+
 def connect_db():
-    # check_same_thread=False is required for SQLite to work safely with FastAPI's multithreading
     conn = psycopg2.connect(DB)
-    # conn.row_factory = psycopg2.Row  # Returns rows as dictionaries instead of tuples
     return conn
+
 
 def get_db():
     conn = connect_db()
@@ -27,13 +31,12 @@ def get_db():
     finally:
         conn.close()
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # --- STARTUP LOGIC ---
     conn = connect_db()
     cursor = conn.cursor()
 
-    # 1. Create the table if it doesn't already exist
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS tasks (
@@ -45,11 +48,9 @@ async def lifespan(app: FastAPI):
     )
     conn.commit()
 
-    # 2. Check if the table is empty
     cursor.execute("SELECT COUNT(*) FROM tasks")
     count = cursor.fetchone()[0]
 
-    # 3. Insert three example tasks ONLY if empty
     if count == 0:
         example_tasks = [
             ("Set up FastAPI project", False),
@@ -63,30 +64,34 @@ async def lifespan(app: FastAPI):
         conn.commit()
 
     conn.close()
-
     yield
+
 
 app = FastAPI(title="Tasky", lifespan=lifespan)
 
+
 @app.get("/")
 async def root():
-    return { "name": "Task API", "version": "1.0", "endpoints": ["/tasks"] }
+    return {"name": "Task API", "version": "1.0", "endpoints": ["/tasks"]}
+
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
+
 @app.get("/tasks", summary="Retrieve all tasks")
 def get_tasks(db=Depends(get_db)):
-    cursor = db.cursor()
+    cursor = db.cursor(cursor_factory=RealDictCursor)
     cursor.execute("SELECT * FROM tasks")
-    tasks = [{**dict(row), "done": bool(row["done"])} for row in cursor.fetchall()]
+    tasks = [{**row, "done": bool(row["done"])} for row in cursor.fetchall()]
     return tasks
+
 
 @app.get("/tasks/{id}", summary="Retrieve a task by ID", status_code=status.HTTP_200_OK)
 def get_task(id: int, db=Depends(get_db)):
-    cursor = db.cursor()
-    cursor.execute("SELECT * FROM tasks WHERE id = ?", (id,))
+    cursor = db.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT * FROM tasks WHERE id = %s", (id,))
     task = cursor.fetchone()
 
     if task is None:
@@ -97,67 +102,69 @@ def get_task(id: int, db=Depends(get_db)):
 
     return dict(task)
 
+
 @app.post("/tasks", summary="Create a new task", status_code=status.HTTP_201_CREATED)
 def create_task(task: dict, db=Depends(get_db)):
     if "title" not in task:
-        return { "error": "Title is required" }, 400
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Title is required"},
+        )
 
-    cursor = db.cursor()
+    cursor = db.cursor(cursor_factory=RealDictCursor)
     cursor.execute(
-        "INSERT INTO tasks (title, done) VALUES (?, ?)",
-        (task["title"], task["done"]),
+        "INSERT INTO tasks (title, done) VALUES (%s, %s) RETURNING id",
+        (task["title"], task.get("done", False)),
     )
     db.commit()
-    
-    # Fetch the newly created task
-    task_id = cursor.lastrowid
-    cursor.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
+
+    task_id = cursor.fetchone()["id"]
+    cursor.execute("SELECT * FROM tasks WHERE id = %s", (task_id,))
     new_task = cursor.fetchone()
-    
-    return new_task, 201
-    
+
+    return dict(new_task)
+
 
 @app.put("/tasks/{id}", summary="Update a task by ID", status_code=status.HTTP_200_OK)
 def update_task(id: int, task: dict, db=Depends(get_db)):
-    cursor = db.cursor()
-    
-    # Check if task exists
-    cursor.execute("SELECT * FROM tasks WHERE id = ?", (id,))
+    cursor = db.cursor(cursor_factory=RealDictCursor)
+
+    cursor.execute("SELECT * FROM tasks WHERE id = %s", (id,))
     existing_task = cursor.fetchone()
-    
+
     if existing_task is None:
         return JSONResponse(
             status_code=404,
             content={"error": "Task not found"},
         )
-    
+
     cursor.execute(
-        "UPDATE tasks SET title = ?, done = ? WHERE id = ?",
-        (task.title, task.done, id),
+        "UPDATE tasks SET title = %s, done = %s WHERE id = %s",
+        (task.get("title", existing_task["title"]),
+         task.get("done", existing_task["done"]), id),
     )
     db.commit()
-    
-    # Fetch and return the updated task
-    cursor.execute("SELECT * FROM tasks WHERE id = ?", (id,))
+
+    cursor.execute("SELECT * FROM tasks WHERE id = %s", (id,))
     updated_task = cursor.fetchone()
-    
+
     return dict(updated_task)
-    
+
+
 @app.delete("/tasks/{id}", summary="Delete a task by ID", status_code=status.HTTP_204_NO_CONTENT)
 def delete_task(id: int, db=Depends(get_db)):
     cursor = db.cursor()
-    
-    # Check if task exists
-    cursor.execute("SELECT * FROM tasks WHERE id = ?", (id,))
+
+    cursor.execute("SELECT * FROM tasks WHERE id = %s", (id,))
     existing_task = cursor.fetchone()
-    
+
     if existing_task is None:
         return JSONResponse(
             status_code=404,
             content={"error": "Task not found"},
         )
-    
-    cursor.execute("DELETE FROM tasks WHERE id = ?", (id,))
+
+    cursor.execute("DELETE FROM tasks WHERE id = %s", (id,))
     db.commit()
-    
-    return {"message": "Task deleted successfully"}
+
+    return Response(status_code=204)
