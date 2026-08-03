@@ -1,10 +1,14 @@
+import os
 from fastapi import Depends, FastAPI, status
 from contextlib import asynccontextmanager
-import sqlite3
+import psycopg2
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from dotenv import load_dotenv
 
-DB = "tasks.db"
+database_url = os.getenv("DATABASE_URL")
+
+DB = database_url
 
 class TaskCreate(BaseModel):
     title: str
@@ -12,8 +16,8 @@ class TaskCreate(BaseModel):
 
 def connect_db():
     # check_same_thread=False is required for SQLite to work safely with FastAPI's multithreading
-    conn = sqlite3.connect(DB, check_same_thread=False)
-    conn.row_factory = sqlite3.Row  # Returns rows as dictionaries instead of tuples
+    conn = psycopg2.connect(DB)
+    # conn.row_factory = psycopg2.Row  # Returns rows as dictionaries instead of tuples
     return conn
 
 def get_db():
@@ -23,7 +27,7 @@ def get_db():
     finally:
         conn.close()
 
-# @asynccontextmanager
+@asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- STARTUP LOGIC ---
     conn = connect_db()
@@ -33,12 +37,13 @@ async def lifespan(app: FastAPI):
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             title TEXT NOT NULL,
             done BOOLEAN DEFAULT False
         )
         """
     )
+    conn.commit()
 
     # 2. Check if the table is empty
     cursor.execute("SELECT COUNT(*) FROM tasks")
@@ -52,7 +57,7 @@ async def lifespan(app: FastAPI):
             ("Build task management API", True),
         ]
         cursor.executemany(
-            "INSERT INTO tasks (title, done) VALUES (?, ?)",
+            "INSERT INTO tasks (title, done) VALUES (%s, %s)",
             example_tasks,
         )
         conn.commit()
