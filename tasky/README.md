@@ -133,3 +133,26 @@ Open SQL prompt
 ```bash
 docker exec -it postgres-container psql -U postgres -d postgres
 ```
+
+# Containerize your stack
+This handles connecting the application to docker and using the postgres image
+
+### To Start the Server
+Make sure you have docker set up on your local machine.
+The environment variable needed for the postgres image is stated in `env.example`. 
+
+
+To start the server, run
+
+```bash
+docker compose up
+```
+
+To stop the server, run
+```bash
+docker compose down
+```
+
+
+### Data in the database
+![Screenshot](./screenshots/dbimage.png)
