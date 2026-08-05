@@ -156,3 +156,24 @@ docker compose down
 
 ### Data in the database
 ![Screenshot](./screenshots/dbimage.png)
+
+
+### AI VS ME
+
+##### The Prompt
+
+Refactor the current application to migrate its data persistence layer from SQLite to a containerized PostgreSQL database. Provide a complete implementation that includes:
+
+1. A docker-compose.yml file to orchestrate both the API server and the PostgreSQL database, allowing the entire stack to be started with a single command.
+2. The use of a Docker volume to ensure persistent database storage.
+3. Application startup logic that detects if a 'tasks' table exists; if not, it must create the table and perform a one-time data seeding.
+4. Secure configuration of the database password via a .env file, along with a corresponding .env.example file that lists all necessary environment variables.
+5. Full preservation of all existing API endpoint behaviors and logic.
+
+Deliver the updated application code and all required configuration files (Dockerfile, docker-compose.yml, and .env.example).
+
+
+##### Differences
+- It got the dockerfile wrong - The dockerfile it created was oversimplified and missing some things. I had to update it to make `docker compose up` run
+- It added more secrets to the .env and .env.example than was needed
+- It is failing on the POST request - Converting from SQLite to PostgreSQL, AI missed some functions that don't apply to psycopg.

@@ -2,10 +2,17 @@ import os
 from fastapi import Depends, FastAPI, status
 from contextlib import asynccontextmanager
 import psycopg2
-from psycopg2.extras import RealDictCursor
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from dotenv import load_dotenv
+
+from repository import (
+    create_task as repo_create_task,
+    get_all_tasks as repo_get_all_tasks,
+    get_task_by_id as repo_get_task_by_id,
+    update_task as repo_update_task,
+    delete_task as repo_delete_task,
+)
 
 load_dotenv()
 
@@ -82,25 +89,18 @@ def health():
 
 @app.get("/tasks", summary="Retrieve all tasks")
 def get_tasks(db=Depends(get_db)):
-    cursor = db.cursor(cursor_factory=RealDictCursor)
-    cursor.execute("SELECT * FROM tasks")
-    tasks = [{**row, "done": bool(row["done"])} for row in cursor.fetchall()]
-    return tasks
+    return repo_get_all_tasks(db)
 
 
 @app.get("/tasks/{id}", summary="Retrieve a task by ID", status_code=status.HTTP_200_OK)
 def get_task(id: int, db=Depends(get_db)):
-    cursor = db.cursor(cursor_factory=RealDictCursor)
-    cursor.execute("SELECT * FROM tasks WHERE id = %s", (id,))
-    task = cursor.fetchone()
-
+    task = repo_get_task_by_id(db, id)
     if task is None:
         return JSONResponse(
             status_code=404,
             content={"error": "Task not found"},
         )
-
-    return dict(task)
+    return task
 
 
 @app.post("/tasks", summary="Create a new task", status_code=status.HTTP_201_CREATED)
@@ -110,61 +110,26 @@ def create_task(task: dict, db=Depends(get_db)):
             status_code=400,
             content={"error": "Title is required"},
         )
-
-    cursor = db.cursor(cursor_factory=RealDictCursor)
-    cursor.execute(
-        "INSERT INTO tasks (title, done) VALUES (%s, %s) RETURNING id",
-        (task["title"], task.get("done", False)),
-    )
-    db.commit()
-
-    task_id = cursor.fetchone()["id"]
-    cursor.execute("SELECT * FROM tasks WHERE id = %s", (task_id,))
-    new_task = cursor.fetchone()
-
-    return dict(new_task)
+    return repo_create_task(db, task["title"], task.get("done", False))
 
 
 @app.put("/tasks/{id}", summary="Update a task by ID", status_code=status.HTTP_200_OK)
 def update_task(id: int, task: dict, db=Depends(get_db)):
-    cursor = db.cursor(cursor_factory=RealDictCursor)
-
-    cursor.execute("SELECT * FROM tasks WHERE id = %s", (id,))
-    existing_task = cursor.fetchone()
-
-    if existing_task is None:
+    updated = repo_update_task(db, id, task.get("title"), task.get("done"))
+    if updated is None:
         return JSONResponse(
             status_code=404,
             content={"error": "Task not found"},
         )
-
-    cursor.execute(
-        "UPDATE tasks SET title = %s, done = %s WHERE id = %s",
-        (task.get("title", existing_task["title"]),
-         task.get("done", existing_task["done"]), id),
-    )
-    db.commit()
-
-    cursor.execute("SELECT * FROM tasks WHERE id = %s", (id,))
-    updated_task = cursor.fetchone()
-
-    return dict(updated_task)
+    return updated
 
 
 @app.delete("/tasks/{id}", summary="Delete a task by ID", status_code=status.HTTP_204_NO_CONTENT)
 def delete_task(id: int, db=Depends(get_db)):
-    cursor = db.cursor()
-
-    cursor.execute("SELECT * FROM tasks WHERE id = %s", (id,))
-    existing_task = cursor.fetchone()
-
-    if existing_task is None:
+    deleted = repo_delete_task(db, id)
+    if not deleted:
         return JSONResponse(
             status_code=404,
             content={"error": "Task not found"},
         )
-
-    cursor.execute("DELETE FROM tasks WHERE id = %s", (id,))
-    db.commit()
-
     return Response(status_code=204)
