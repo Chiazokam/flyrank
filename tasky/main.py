@@ -96,7 +96,7 @@ def create_task(task: dict, db=Depends(get_db)):
     )
     db.commit()
     
-    task_id = cursor.lastrowid
+    task_id = cursor.fetchone()["id"]
     cursor.execute("SELECT * FROM tasks WHERE id = %s", (task_id,))
     new_task = cursor.fetchone()
     
