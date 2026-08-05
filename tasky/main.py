@@ -1,19 +1,16 @@
 from fastapi import Depends, FastAPI, status
 from contextlib import asynccontextmanager
-import sqlite3
+import psycopg
+from psycopg.rows import dict_row
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+import os
 
-DB = "tasks.db"
-
-class TaskCreate(BaseModel):
-    title: str
-    done: bool = False
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 def connect_db():
-    # check_same_thread=False is required for SQLite to work safely with FastAPI's multithreading
-    conn = sqlite3.connect(DB, check_same_thread=False)
-    conn.row_factory = sqlite3.Row  # Returns rows as dictionaries instead of tuples
+    conn = psycopg.connect(DATABASE_URL)
+    conn.row_factory = dict_row
     return conn
 
 def get_db():
@@ -23,36 +20,31 @@ def get_db():
     finally:
         conn.close()
 
-# @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # --- STARTUP LOGIC ---
     conn = connect_db()
     cursor = conn.cursor()
 
-    # 1. Create the table if it doesn't already exist
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             title TEXT NOT NULL,
-            done BOOLEAN DEFAULT False
+            done BOOLEAN DEFAULT FALSE
         )
         """
     )
 
-    # 2. Check if the table is empty
-    cursor.execute("SELECT COUNT(*) FROM tasks")
-    count = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) as count FROM tasks")
+    count = cursor.fetchone()["count"]
 
-    # 3. Insert three example tasks ONLY if empty
     if count == 0:
         example_tasks = [
             ("Set up FastAPI project", False),
-            ("Connect SQLite database", False),
+            ("Connect PostgreSQL database", False),
             ("Build task management API", True),
         ]
         cursor.executemany(
-            "INSERT INTO tasks (title, done) VALUES (?, ?)",
+            "INSERT INTO tasks (title, done) VALUES (%s, %s)",
             example_tasks,
         )
         conn.commit()
@@ -81,7 +73,7 @@ def get_tasks(db=Depends(get_db)):
 @app.get("/tasks/{id}", summary="Retrieve a task by ID", status_code=status.HTTP_200_OK)
 def get_task(id: int, db=Depends(get_db)):
     cursor = db.cursor()
-    cursor.execute("SELECT * FROM tasks WHERE id = ?", (id,))
+    cursor.execute("SELECT * FROM tasks WHERE id = %s", (id,))
     task = cursor.fetchone()
 
     if task is None:
@@ -99,25 +91,22 @@ def create_task(task: dict, db=Depends(get_db)):
 
     cursor = db.cursor()
     cursor.execute(
-        "INSERT INTO tasks (title, done) VALUES (?, ?)",
+        "INSERT INTO tasks (title, done) VALUES (%s, %s)",
         (task["title"], task["done"]),
     )
     db.commit()
     
-    # Fetch the newly created task
     task_id = cursor.lastrowid
-    cursor.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
+    cursor.execute("SELECT * FROM tasks WHERE id = %s", (task_id,))
     new_task = cursor.fetchone()
     
     return new_task, 201
-    
 
 @app.put("/tasks/{id}", summary="Update a task by ID", status_code=status.HTTP_200_OK)
 def update_task(id: int, task: dict, db=Depends(get_db)):
     cursor = db.cursor()
     
-    # Check if task exists
-    cursor.execute("SELECT * FROM tasks WHERE id = ?", (id,))
+    cursor.execute("SELECT * FROM tasks WHERE id = %s", (id,))
     existing_task = cursor.fetchone()
     
     if existing_task is None:
@@ -127,23 +116,21 @@ def update_task(id: int, task: dict, db=Depends(get_db)):
         )
     
     cursor.execute(
-        "UPDATE tasks SET title = ?, done = ? WHERE id = ?",
-        (task.title, task.done, id),
+        "UPDATE tasks SET title = %s, done = %s WHERE id = %s",
+        (task["title"], task["done"], id),
     )
     db.commit()
     
-    # Fetch and return the updated task
-    cursor.execute("SELECT * FROM tasks WHERE id = ?", (id,))
+    cursor.execute("SELECT * FROM tasks WHERE id = %s", (id,))
     updated_task = cursor.fetchone()
     
     return dict(updated_task)
-    
+
 @app.delete("/tasks/{id}", summary="Delete a task by ID", status_code=status.HTTP_204_NO_CONTENT)
 def delete_task(id: int, db=Depends(get_db)):
     cursor = db.cursor()
     
-    # Check if task exists
-    cursor.execute("SELECT * FROM tasks WHERE id = ?", (id,))
+    cursor.execute("SELECT * FROM tasks WHERE id = %s", (id,))
     existing_task = cursor.fetchone()
     
     if existing_task is None:
@@ -152,7 +139,7 @@ def delete_task(id: int, db=Depends(get_db)):
             content={"error": "Task not found"},
         )
     
-    cursor.execute("DELETE FROM tasks WHERE id = ?", (id,))
+    cursor.execute("DELETE FROM tasks WHERE id = %s", (id,))
     db.commit()
     
     return {"message": "Task deleted successfully"}
