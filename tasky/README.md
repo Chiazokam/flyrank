@@ -159,6 +159,7 @@ docker compose down
 
 
 ### AI VS ME
+The AI version is in a separate branch `ai-vs-me-containerize-your-stack`
 
 ##### The Prompt
 
@@ -177,3 +178,4 @@ Deliver the updated application code and all required configuration files (Docke
 - It got the dockerfile wrong - The dockerfile it created was oversimplified and missing some things. I had to update it to make `docker compose up` run
 - It added more secrets to the .env and .env.example than was needed
 - It is failing on the POST request - Converting from SQLite to PostgreSQL, AI missed some functions that don't apply to psycopg.
+- I missed asking it to separate the data layer into a repository file
