@@ -5,6 +5,8 @@ import psycopg2
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from dotenv import load_dotenv
+from supabase import Client
+from database import get_supabase
 
 from repository import (
     create_task as repo_create_task,
