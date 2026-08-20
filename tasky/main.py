@@ -102,6 +102,7 @@ def get_protected_profile(
     credentials: HTTPAuthorizationCredentials | None = Depends(
         HTTPBearer(auto_error=False)
     ),
+    supabase=Depends(get_supabase)
 ):
     if credentials is None:
         raise HTTPException(
@@ -111,7 +112,19 @@ def get_protected_profile(
 
     token = credentials.credentials
 
-    return
+    try:
+        response = supabase.auth.get_user(token)
+    except AuthApiError as e:
+            return JSONResponse(
+                status_code=401,
+                content={"error": e.message or "Invalid or expiredtoken"},
+            )
+    return {
+            "id": response.user.id,
+            "email": response.user.email,
+            "created_at": response.user.created_at,
+    }
+
 
 
 @app.get("/tasks", summary="Retrieve all tasks")
