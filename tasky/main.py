@@ -1,5 +1,6 @@
 import os
-from fastapi import Depends, FastAPI, status
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from contextlib import asynccontextmanager
 import psycopg2
 from fastapi.responses import JSONResponse, Response
@@ -91,6 +92,26 @@ async def root():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+@app.get("/public/info")
+async def public():
+    return {"message": "Welcome stranger! This info is public."}
+
+@app.get("/protected/profile", summary="Protected route", status_code=status.HTTP_200_OK)
+def get_protected_profile(
+    credentials: HTTPAuthorizationCredentials | None = Depends(
+        HTTPBearer(auto_error=False)
+    ),
+):
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"error": "Access token required"},
+        )
+
+    token = credentials.credentials
+
+    return
 
 
 @app.get("/tasks", summary="Retrieve all tasks")
