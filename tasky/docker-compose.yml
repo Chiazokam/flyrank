@@ -23,6 +23,13 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_KEY: ${SUPABASE_KEY}
+    # Bind mount local source into the container so edits are reflected live.
+    # `.:/app` overrides the files copied at build time (Dockerfile `COPY . .`).
+    volumes:
+      - .:/app
+    # Use a single-worker reloader for development (uvicorn's --reload is
+    # more reliable than gunicorn --reload with multiple workers).
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     ports:
       - "8000:8000"
     depends_on:

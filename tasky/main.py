@@ -5,7 +5,7 @@ import psycopg2
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from dotenv import load_dotenv
-from supabase import Client
+from supabase import AuthApiError
 from database import get_supabase
 
 from repository import (
@@ -24,8 +24,12 @@ DB = database_url
 
 
 class TaskCreate(BaseModel):
-    title: str
+    title: str | None = None
     done: bool = False
+
+class UserAuth(BaseModel):
+    email: str | None = None
+    password: str | None = None
 
 
 def connect_db():
@@ -106,8 +110,8 @@ def get_task(id: int, db=Depends(get_db)):
 
 
 @app.post("/tasks", summary="Create a new task", status_code=status.HTTP_201_CREATED)
-def create_task(task: dict, db=Depends(get_db)):
-    if "title" not in task:
+def create_task(task: TaskCreate, db=Depends(get_db)):
+    if not task.title:
         return JSONResponse(
             status_code=400,
             content={"error": "Title is required"},
@@ -115,8 +119,49 @@ def create_task(task: dict, db=Depends(get_db)):
     return repo_create_task(db, task["title"], task.get("done", False))
 
 
+@app.post("/auth/signup", summary="Sign users up", status_code=status.HTTP_201_CREATED)
+def sign_up(user: UserAuth, supabase=Depends(get_supabase)):
+    if not user.email or not user.password:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "User email or password is required"},
+        )
+    response = supabase.auth.sign_up(
+        {
+            "email": user.email,
+            "password": user.password,
+        }
+    )
+    return response
+
+@app.post("/auth/login", summary="Login Users", status_code=status.HTTP_200_OK)
+def login(user: UserAuth, supabase=Depends(get_supabase)):
+    if not user.email or not user.password:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "User email or password is required"},
+        )
+    try:
+        response = supabase.auth.sign_in_with_password(
+            {
+                "email": user.email,
+                "password": user.password,
+            }
+        )
+    except AuthApiError as e:
+        return JSONResponse(
+            status_code=401,
+            content={"error": e.message or "Invalid email or password"},
+        )
+    return {
+        "access_token": response.session.access_token,
+        "refresh_token": response.session.refresh_token,
+    }
+
+
 @app.put("/tasks/{id}", summary="Update a task by ID", status_code=status.HTTP_200_OK)
 def update_task(id: int, task: dict, db=Depends(get_db)):
+    
     updated = repo_update_task(db, id, task.get("title"), task.get("done"))
     if updated is None:
         return JSONResponse(

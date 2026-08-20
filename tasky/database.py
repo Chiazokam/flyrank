@@ -10,6 +10,10 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 if not SUPABASE_URL or not SUPABASE_KEY:
     raise ValueError("Supabase credentials missing from environment variables.")
 
+SUPABASE_URL = SUPABASE_URL.strip().rstrip("/")
+if not SUPABASE_URL.startswith("https://"):
+    raise ValueError(f"Invalid SUPABASE_URL format: {SUPABASE_URL}")
+
 # Create a single client instance
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -20,5 +24,3 @@ def get_supabase():
     except Exception as e:
         print(f"Database error: {e}")
         raise
-    finally:
-        supabase.close()
