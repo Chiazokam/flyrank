@@ -179,3 +179,9 @@ Deliver the updated application code and all required configuration files (Docke
 - It added more secrets to the .env and .env.example than was needed
 - It is failing on the POST request - Converting from SQLite to PostgreSQL, AI missed some functions that don't apply to psycopg.
 - I missed asking it to separate the data layer into a repository file
+
+
+# Auth · Login & protect
+
+### Data in the database
+![Screenshot showing the swagger with the autorize button](./screenshots/swagger_with_authorize_button.png)
