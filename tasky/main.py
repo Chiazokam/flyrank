@@ -1,13 +1,14 @@
 import os
-from fastapi import Depends, FastAPI, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import Depends, FastAPI, Request, status
+from fastapi.openapi.utils import get_openapi
 from contextlib import asynccontextmanager
 import psycopg2
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from supabase import AuthApiError
-from database import get_supabase
+from database import get_supabase, supabase
+from middleware import auth_middleware
 
 from repository import (
     create_task as repo_create_task,
@@ -84,6 +85,35 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Tasky", lifespan=lifespan)
 
 
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        routes=app.routes,
+    )
+    schema["components"]["securitySchemes"] = {
+        "BearerAuth": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+        }
+    }
+    for path in schema["paths"].values():
+        for operation in path.values():
+            operation["security"] = [{"BearerAuth": []}]
+
+    app.openapi_schema = schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
+
+app.middleware("http")(auth_middleware)
+
+
 @app.get("/")
 async def root():
     return {"name": "Task API", "version": "1.0", "endpoints": ["/tasks"]}
@@ -98,32 +128,19 @@ async def public():
     return {"message": "Welcome stranger! This info is public."}
 
 @app.get("/protected/profile", summary="Protected route", status_code=status.HTTP_200_OK)
-def get_protected_profile(
-    credentials: HTTPAuthorizationCredentials | None = Depends(
-        HTTPBearer(auto_error=False)
-    ),
-    supabase=Depends(get_supabase)
-):
-    if credentials is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"error": "Access token required"},
-        )
-
-    token = credentials.credentials
-
-    try:
-        response = supabase.auth.get_user(token)
-    except AuthApiError as e:
-            return JSONResponse(
-                status_code=401,
-                content={"error": e.message or "Invalid or expiredtoken"},
-            )
+def get_protected_profile(request: Request):
+    user = request.state.user
     return {
-            "id": response.user.id,
-            "email": response.user.email,
-            "created_at": response.user.created_at,
+        "id": user.id,
+        "email": user.email,
+        "created_at": user.created_at,
     }
+
+
+@app.post("/auth/logout", summary="Log out signed in user", status_code=status.HTTP_204_NO_CONTENT)
+def logout(supabase=Depends(get_supabase)):
+    response = supabase.auth.sign_out()
+    return response
 
 
 
